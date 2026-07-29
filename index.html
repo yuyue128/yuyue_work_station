@@ -277,10 +277,10 @@ const Sync = {
     const c=this.cfg();
     App.openModal(`<h3>☁️ 云同步设置</h3>
       <div class="notice" style="border-style:solid;margin-bottom:14px">数据会加密后存进你的<strong>私有仓库</strong>。Token 只存在本机浏览器，不会写进公开代码。</div>
-      <div class="field"><label class="fld">GitHub 用户名 (owner)</label><input class="input" id="sy_owner" value="${esc(c.owner)}" placeholder="你的用户名"></div>
-      <div class="field"><label class="fld">私有仓库名 (repo)</label><input class="input" id="sy_repo" value="${esc(c.repo)}" placeholder="如 yuyue-data"></div>
-      <div class="field"><label class="fld">访问令牌 Token (repo 权限)</label><input class="input" id="sy_token" type="password" value="${esc(c.token)}" placeholder="ghp_..."></div>
-      <div class="field"><label class="fld">加密密码（多设备须一致）</label><input class="input" id="sy_pass" type="password" value="${esc(c.pass)}" placeholder="设一个强密码"></div>
+      <div class="field"><label class="fld">GitHub 用户名 (owner)</label><input class="input" id="sy_owner" value="${esc(c.owner)}" placeholder="用户名"></div>
+      <div class="field"><label class="fld">私有仓库名 (repo)</label><input class="input" id="sy_repo" value="${esc(c.repo)}" ></div>
+      <div class="field"><label class="fld">访问令牌 Token (repo 权限)</label><input class="input" id="sy_token" type="password" value="${esc(c.token)}"></div>
+      <div class="field"><label class="fld">加密密码（多设备须一致）</label><input class="input" id="sy_pass" type="password" value="${esc(c.pass)}"></div>
       <div class="field"><label class="fld">文件名</label><input class="input" id="sy_path" value="${esc(c.path||'yy_data.json')}"></div>
       <div class="row" style="justify-content:space-between;align-items:center">
         <label style="display:flex;gap:8px;align-items:center;font-size:13px"><input type="checkbox" id="sy_on" ${c.on?'checked':''}> 开启自动同步</label>
@@ -560,7 +560,7 @@ function renderMoney(root){
   render();
 }
 
-/* ============ 4. 重要日期倒计时 ============ */
+/* ============ 4. 倒计时 ============ */
 function renderCountdown(root){
   let cds=DB.get('countdowns',[]);
   const t=root;
@@ -824,10 +824,10 @@ function renderTips(root){
     const filtered= kw? tips.filter(x=>(x.text+x.cat+x.tag||'').toLowerCase().includes(kw.toLowerCase())):tips;
     t.innerHTML=`<div class="card"><h2>💡 小tips收集</h2>
       <div class="row">
-        <div class="field" style="flex:2;min-width:120px"><label class="fld">内容</label><input class="input" id="tp_text" placeholder="如：番茄工作法：25分钟专注+5分钟休息"></div>
-        <div class="field" style="flex:1;min-width:90px"><label class="fld">分类</label><input class="input" id="tp_cat" placeholder="效率"></div>
+        <div class="field" style="flex:2;min-width:120px"><label class="fld">内容</label><input class="input" id="tp_text" ></div>
+        <div class="field" style="flex:1;min-width:90px"><label class="fld">分类</label><input class="input" id="tp_cat"></div>
       </div>
-      <div class="field"><label class="fld">标签（可选，逗号分隔）</label><input class="input" id="tp_tag" placeholder="时间管理"></div>
+      <div class="field"><label class="fld">标签（可选，逗号分隔）</label><input class="input" id="tp_tag" ></div>
       <button class="btn" onclick="__saveTp()">+ 添加tip</button></div>
     <div class="card"><h2>🔍 快速查找（${filtered.length}/${tips.length}）</h2>
       <input class="input" placeholder="搜索内容/分类/标签…" value="${esc(kw)}" oninput="window.__search(this.value)" style="margin-bottom:12px">
