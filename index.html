@@ -181,6 +181,7 @@ label.fld{display:block;font-size:13px;color:var(--text-light);margin:0 0 5px;fo
     </div>
     <nav class="nav" id="nav"></nav>
     <div class="side-foot">
+      <button class="mini-btn" onclick="Sync.setup()">☁️ 云同步</button>
       <button class="mini-btn" onclick="App.exportAll()">📤 导出备份(JSON)</button>
       <button class="mini-btn" onclick="App.exportXLSX()">📊 导出Excel</button>
       <button class="mini-btn" onclick="App.importAll()">📥 导入备份</button>
@@ -205,7 +206,110 @@ label.fld{display:block;font-size:13px;color:var(--text-light);margin:0 0 5px;fo
 /* ============ 数据存储 ============ */
 const DB = {
   get(k, def){ try{ const v = localStorage.getItem('yy_'+k); return v?JSON.parse(v):def; }catch(e){ return def; } },
-  set(k, v){ localStorage.setItem('yy_'+k, JSON.stringify(v)); }
+  set(k, v){ localStorage.setItem('yy_'+k, JSON.stringify(v)); Sync.schedule(); }
+};
+
+/* ============ 云同步引擎（私有仓库 + 密码加密） ============ */
+const Sync = {
+  cfg(){ return DB.get('sync_cfg', {token:'', owner:'', repo:'', pass:'', path:'yy_data.json', on:false}); },
+  saveCfg(c){ DB.set('sync_cfg', c); },
+  isOn(){ return this.cfg().on && this.cfg().token && this.cfg().owner && this.cfg().repo; },
+  _timer:null,
+  schedule(){ if(!this.isOn()) return; clearTimeout(this._timer); this._timer=setTimeout(()=>this.push(), 1200); },
+  /* ---- AES-GCM 加解密 ---- */
+  async _deriveKey(pass, salt){
+    const enc=new TextEncoder();
+    const keyMat=await crypto.subtle.importKey('raw', enc.encode(pass), 'PBKDF2', false, ['deriveKey']);
+    return crypto.subtle.deriveKey({name:'PBKDF2', salt, iterations:100000, hash:'SHA-256'},
+      keyMat, {name:'AES-GCM', length:256}, false, ['encrypt','decrypt']);
+  },
+  async encrypt(obj, pass){
+    const enc=new TextEncoder(); const salt=crypto.getRandomValues(new Uint8Array(16));
+    const iv=crypto.getRandomValues(new Uint8Array(12));
+    const key=await this._deriveKey(pass, salt);
+    const ct=await crypto.subtle.encrypt({name:'AES-GCM', iv}, key, enc.encode(JSON.stringify(obj)));
+    const buf=new Uint8Array(salt.length+iv.length+ct.byteLength);
+    buf.set(salt,0); buf.set(iv,salt.length); buf.set(new Uint8Array(ct), salt.length+iv.length);
+    return btoa(String.fromCharCode(...buf));
+  },
+  async decrypt(b64, pass){
+    const bin=atob(b64); const buf=new Uint8Array(bin.length);
+    for(let i=0;i<bin.length;i++) buf[i]=bin.charCodeAt(i);
+    const salt=buf.slice(0,16), iv=buf.slice(16,28), ct=buf.slice(28);
+    const key=await this._deriveKey(pass, salt);
+    const pt=await crypto.subtle.decrypt({name:'AES-GCM', iv}, key, ct);
+    return JSON.parse(new TextDecoder().decode(pt));
+  },
+  /* ---- GitHub 读写 ---- */
+  async _api(method, path, body){
+    const c=this.cfg();
+    const url=`https://api.github.com/repos/${c.owner}/${c.repo}/contents/${encodeURIComponent(c.path)}`;
+    const opt={method, headers:{'Authorization':'Bearer '+c.token,'Accept':'application/vnd.github+json','X-GitHub-Api-Version':'2022-11-28'}};
+    if(body){ opt.headers['Content-Type']='application/json'; opt.body=JSON.stringify(body); }
+    const r=await fetch(url, opt);
+    if(!r.ok){ const e=await r.json().catch(()=>({})); throw new Error(e.message||('HTTP '+r.status)); }
+    return r.json();
+  },
+  _collect(){ const d={}; Object.keys(localStorage).filter(k=>k.startsWith('yy_')).forEach(k=>d[k]=localStorage.getItem(k)); return d; },
+  _merge(remote){
+    // 远程优先（最新），但保留本地独有键；按 JSON 内容去重避免覆盖
+    Object.keys(remote).forEach(k=>{ if(k.startsWith('yy_')) localStorage.setItem(k, remote[k]); });
+  },
+  async push(){
+    if(!this.isOn()) return; const c=this.cfg();
+    try{
+      const payload=await this.encrypt(this._collect(), c.pass);
+      let sha; try{ const cur=await this._api('GET',''); sha=cur.sha; }catch(e){ sha=null; }
+      await this._api('PUT','', {message:'sync '+new Date().toISOString(), content:payload, sha:sha||undefined});
+      toast('☁️ 已同步到云端');
+    }catch(e){ console.warn('sync push failed', e); }
+  },
+  async pull(){
+    if(!this.isOn()) return; const c=this.cfg();
+    try{
+      const cur=await this._api('GET','');
+      const data=await this.decrypt(cur.content, c.pass);
+      this._merge(data); toast('☁️ 已从云端拉取');
+      App.buildNav(); App.go(App.current);
+    }catch(e){ toast('拉取失败：'+e.message); }
+  },
+  setup(){
+    const c=this.cfg();
+    App.openModal(`<h3>☁️ 云同步设置</h3>
+      <div class="notice" style="border-style:solid;margin-bottom:14px">数据会加密后存进你的<strong>私有仓库</strong>。Token 只存在本机浏览器，不会写进公开代码。</div>
+      <div class="field"><label class="fld">GitHub 用户名 (owner)</label><input class="input" id="sy_owner" value="${esc(c.owner)}" placeholder="你的用户名"></div>
+      <div class="field"><label class="fld">私有仓库名 (repo)</label><input class="input" id="sy_repo" value="${esc(c.repo)}" placeholder="如 yuyue-data"></div>
+      <div class="field"><label class="fld">访问令牌 Token (repo 权限)</label><input class="input" id="sy_token" type="password" value="${esc(c.token)}" placeholder="ghp_..."></div>
+      <div class="field"><label class="fld">加密密码（多设备须一致）</label><input class="input" id="sy_pass" type="password" value="${esc(c.pass)}" placeholder="设一个强密码"></div>
+      <div class="field"><label class="fld">文件名</label><input class="input" id="sy_path" value="${esc(c.path||'yy_data.json')}"></div>
+      <div class="row" style="justify-content:space-between;align-items:center">
+        <label style="display:flex;gap:8px;align-items:center;font-size:13px"><input type="checkbox" id="sy_on" ${c.on?'checked':''}> 开启自动同步</label>
+        <div class="row" style="margin:0">
+          <button class="btn ghost" onclick="App.closeModal()">取消</button>
+          <button class="btn" onclick="Sync.saveSetup()">保存</button>
+        </div>
+      </div>
+      <div class="row" style="margin-top:10px;justify-content:flex-end">
+        <button class="btn ghost sm" onclick="Sync.testConn()">测试连接</button>
+        <button class="btn ghost sm" onclick="Sync.pull()">立即拉取</button>
+      </div>`);
+  },
+  saveSetup(){
+    const c=this.cfg();
+    c.owner=document.getElementById('sy_owner').value.trim();
+    c.repo=document.getElementById('sy_repo').value.trim();
+    c.token=document.getElementById('sy_token').value.trim();
+    c.pass=document.getElementById('sy_pass').value;
+    c.path=document.getElementById('sy_path').value.trim()||'yy_data.json';
+    c.on=document.getElementById('sy_on').checked;
+    if(!c.owner||!c.repo||!c.token||!c.pass){ toast('请填完整'); return; }
+    this.saveCfg(c); App.closeModal(); toast('已保存，正在首次同步…');
+    this.push();
+  },
+  async testConn(){
+    if(!this.cfg().token||!this.cfg().owner||!this.cfg().repo){ toast('请先填完整'); return; }
+    try{ await this._api('GET',''); toast('✅ 连接成功'); }catch(e){ toast('❌ '+e.message); }
+  }
 };
 const todayStr = ()=> new Date().toISOString().slice(0,10);
 const fmtDate = (d)=>{ const x=new Date(d); return x.getFullYear()+'/'+(x.getMonth()+1)+'/'+x.getDate(); };
@@ -807,6 +911,7 @@ function renderSummary(root){
 
 /* ============ 启动 ============ */
 if(window.innerWidth<=640){ document.getElementById('sidebar').classList.add('collapsed'); }
+if(Sync.isOn()){ Sync.pull(); }
 App.buildNav();
 App.go('overview');
 </script>
