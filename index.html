@@ -318,14 +318,14 @@ const daysBetween = (a,b)=> Math.round((new Date(b+'T00:00:00')-new Date(a+'T00:
 /* ============ 模块注册表 ============ */
 const MODULES = [
   {id:'overview', icon:'🌸', name:'今日概览', def:true, render:renderOverview},
-  {id:'tasks',    icon:'✅', name:'每日任务看板', def:true, render:renderTasks},
+  {id:'tasks',    icon:'✅', name:'每日任务', def:true, render:renderTasks},
   {id:'money',    icon:'💰', name:'记账模块', def:true, render:renderMoney},
-  {id:'countdown',icon:'⏳', name:'重要日期倒计时', def:true, render:renderCountdown},
+  {id:'countdown',icon:'⏳', name:'倒计时', def:true, render:renderCountdown},
   {id:'reading',  icon:'📚', name:'阅读打卡', def:true, render:renderReading},
-  {id:'english',  icon:'🗣️', name:'英语学习模块', def:true, render:renderEnglish},
-  {id:'knowledge',icon:'🧠', name:'知识库模块', def:true, render:renderKnowledge},
-  {id:'tips',     icon:'💡', name:'小tips模块', def:true, render:renderTips},
-  {id:'summary',  icon:'📝', name:'每日总结模块', def:true, render:renderSummary},
+  {id:'english',  icon:'🗣️', name:'英语学习', def:true, render:renderEnglish},
+  {id:'knowledge',icon:'🧠', name:'知识库', def:true, render:renderKnowledge},
+  {id:'tips',     icon:'💡', name:'小tips', def:true, render:renderTips},
+  {id:'summary',  icon:'📝', name:'每日总结', def:true, render:renderSummary},
 ];
 const settings = DB.get('settings', {});
 MODULES.forEach(m=>{ if(settings[m.id]===undefined) settings[m.id]={name:m.name,on:true}; });
